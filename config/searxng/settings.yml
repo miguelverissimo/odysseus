@@ -7,3 +7,10 @@ search:
   formats:
     - html
     - json
+  # Explicit on this pinned image: use_default_settings does not reliably
+  # inherit default_doi_resolver, so searxng 500s on every request with
+  # KeyError: 'default_doi_resolver'. Setting it here makes the key present.
+  default_doi_resolver: 'oadoi.org'
+
+doi_resolvers:
+  oadoi.org: 'https://oadoi.org/'
