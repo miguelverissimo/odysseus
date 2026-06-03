@@ -90,12 +90,32 @@ services:
       - -c
       - |
         set -eu
+        # Settings are generated inline (no bind-mounted template file).
+        # Coolify resolves relative bind sources (./config/...) against an
+        # ephemeral /artifacts/<uuid> project dir; the file was not present at
+        # mount time, so Docker created an empty DIRECTORY there and searxng
+        # booted with broken defaults (KeyError: default_doi_resolver). Writing
+        # the file here removes that dependency entirely.
         if [ ! -s /etc/searxng/settings.yml ] || grep -q 'odysseus-local-searxng-json-2026-05-30\|__SEARXNG_SECRET__' /etc/searxng/settings.yml; then
           secret="$${SEARXNG_SECRET:-}"
           if [ -z "$$secret" ]; then
             secret="$$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
           fi
-          sed "s|__SEARXNG_SECRET__|$$secret|g" /tmp/searxng-settings.yml.template > /etc/searxng/settings.yml
+          cat > /etc/searxng/settings.yml <<EOF
+        # odysseus-local-searxng-json-2026-05-30
+        use_default_settings: true
+        server:
+          secret_key: "$$secret"
+        search:
+          formats:
+            - html
+            - json
+          # default_doi_resolver is not reliably inherited from use_default_settings
+          # on this pinned image (Python 3.14) -> set it explicitly.
+          default_doi_resolver: 'oadoi.org'
+        doi_resolvers:
+          oadoi.org: 'https://oadoi.org/'
+        EOF
         fi
         exec /usr/local/searxng/entrypoint.sh
     # No host port: odysseus reaches searxng internally as http://searxng:8080.
@@ -104,7 +124,6 @@ services:
       - "8080"
     volumes:
       - searxng-data:/etc/searxng
-      - ./config/searxng/settings.yml:/tmp/searxng-settings.yml.template:ro,z
     environment:
       - SEARXNG_BASE_URL=http://localhost:8080/
       - SEARXNG_SECRET=${SEARXNG_SECRET:-}
